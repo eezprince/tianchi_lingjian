@@ -1,21 +1,27 @@
 # input
-data_path = r"data/full_data.txt"
 
 # output
 prepared_data_path = r"data/prepared_data.txt"
-removed_column_path = r"data/removed_column.txt"
 onehot_column_path = r"data/onehot_column.txt"
 
 # configure
-training_data = True
+training_data = False
+if not training_data:
+    prepared_data_path += "_test"
+    data_path = r"data/testA.txt"
+else:
+    data_path = r"data/full_data.txt"
 
 
+def read_file_as_list(file_path):
+    with open(file_path, "r") as f_in:
+        return f_in.read().splitlines()
 # define some variable and read data to lines
 datas = []
 tool_column = []
 with open(data_path, "r") as f_in:
     lines = f_in.read().splitlines()
-empty_column = range(0, len(lines[0].split("\t")))
+
 
 # find tool column
 if training_data:
@@ -36,18 +42,14 @@ for row, line in enumerate(lines[1:]):
     items = line.split("\t")
     for column, item in enumerate(items):
         item = item.strip()
-        if not item:
+        if not item or item.startswith("2017") or item.startswith("2.017"):
             data.append("NaN")
-        elif column in tool_column:
+        elif str(column) in tool_column:
             data.append(item)
-            if column in empty_column:
-                empty_column.remove(column)
         else:
             value = item
             try:
                 value = float(item)
-                if column in empty_column:
-                    empty_column.remove(column)
             except ValueError:
                 if column != 0:
                     print("'{}' at {}, {}.".format(item, row + 1, column))
@@ -55,20 +57,9 @@ for row, line in enumerate(lines[1:]):
     datas.append(data)
 
 
-print(empty_column)
-# write removed column
-with open(removed_column_path, "w") as f_out:
-    f_out.write("\n".join([str(i) for i in empty_column]))
-
-
 # write prepared data
 with open(prepared_data_path, "w") as f_out:
     for data in datas:
         f_out.write("\t".join([str(d) for d in data]))
         f_out.write("\n")
-
-
-def read_file_as_list(file_path):
-    with open(file_path, "r") as f_in:
-        return f_in.read().splitline()
 

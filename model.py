@@ -21,37 +21,54 @@ class Model():
         self.dropout_rate = self.config["dropout_rate"]
         self.training_data = self.config["training_data"]
         self.test_size = self.config["test_size"]
-        self._load_data()
+        self.bn = True
+        self.dropout = True
+        self._load_data(is_training)
         dropout_rate = self.dropout_rate
-        reuse = False
-        if not is_training:
-            reuse = True
-        with tf.variable_scope("", reuse=reuse):
+        with tf.variable_scope("main"):
+            self.is_training = tf.placeholder(tf.bool, name="is_training")
             self.inputs = tf.placeholder(tf.float32, shape=[self.batch_size, Model.input_dim], name="inputs")
-            self.input_layer = self.forwardprop(self.inputs, Model.input_dim, self.hidden_dim, "input_layer")
-            self.input_dropout_layer = tf.layers.dropout(self.input_layer, dropout_rate,
-                    training=is_training, name="input_droput_layer")
-            self.hidden_layer = self.forwardprop(self.input_dropout_layer, self.hidden_dim,
-                    self.hidden_dim, "hidden_layer")
-            self.hidden_dropout_layer = tf.layers.dropout(self.hidden_layer, dropout_rate,
-                    training=is_training, name="hidden_dropout_layer")
-            self.hidden2_layer = self.forwardprop(self.hidden_dropout_layer, self.hidden_dim,
-                    self.hidden_dim, "hidden2_layer")
-            self.outputs_hat = components.linear_layer(self.hidden2_layer, self.hidden_dim,
+            input_layer = self.add_layer(self.inputs, Model.input_dim, self.hidden_dim, self.is_training,
+                    self.dropout, self.dropout_rate, self.bn, "input_layer")
+            hidden_layer = self.add_layer(input_layer, self.hidden_dim, self.hidden_dim, self.is_training,
+                    self.dropout, self.dropout_rate, self.bn, "hidden_layer")
+            self.outputs_hat = components.linear_layer(hidden_layer, self.hidden_dim,
                     1, True, "output_layer")
             self.outputs = tf.placeholder(tf.float32, shape=[self.batch_size, 1], name="outputs")
             self.cost = tf.reduce_mean(tf.square(self.outputs - self.outputs_hat))
+            regularization_loss = tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES))
+            self.loss = tf.identity(self.cost, "loss")
             global_step = tf.Variable(0, name='global_step', trainable=False)
 
-            learning_rate = tf.train.exponential_decay(self.lr, global_step, 3000, 0.96, staircase=True)
-            self.optimizer = tf.train.AdamOptimizer(learning_rate)
-            self.train_op = self.optimizer.minimize(self.cost, global_step=global_step)
+            self.learning_rate = tf.train.exponential_decay(self.lr, global_step, 300, 0.96, staircase=True)
+            self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+            self.gvs = self.optimizer.compute_gradients(self.loss + 0.001*regularization_loss)
+
+            # gradient clipping
+            gradients = [grad for grad, var in self.gvs]
+            params = [var for grad, var in self.gvs]
+            clipped_gradients, norm = tf.clip_by_global_norm(gradients, 1.0)
+
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                self.train_op = self.optimizer.apply_gradients(zip(clipped_gradients, params), global_step)
+                # self.train_op = self.optimizer.minimize(self.loss, global_step=global_step)
 
 
-    def forwardprop(self, inputs, input_dim, output_dim, variable_scope):
-        linear_outputs = components.linear_layer(inputs, input_dim,
-                output_dim, bias=True, variable_scope=variable_scope)
-        return tf.nn.relu(linear_outputs)
+    def add_layer(self, inputs, input_dim, output_dim, is_training, dropout=False, dropout_rate=0,
+            bn=False, variable_scope="dense_layer"):
+        with tf.variable_scope(variable_scope):
+            forward_out = self.forwardprop(inputs, input_dim, output_dim, is_training=is_training, bn=bn)
+            if dropout:
+                forward_out = tf.layers.dropout(forward_out, dropout_rate, training=is_training)
+            return forward_out
+
+
+    def forwardprop(self, inputs, input_dim, output_dim, is_training, bn=False, variable_scope="FF"):
+        linear_outputs = components.linear_layer(inputs, input_dim, output_dim, bias=True)
+        if bn:
+            linear_outputs = tf.contrib.layers.batch_norm(linear_outputs, is_training=is_training, scope='bn')
+        return tf.nn.relu(linear_outputs, "relu")
 
 
     def _check_config(self, config):
@@ -63,21 +80,29 @@ class Model():
         return ""
 
 
-    def _load_data(self):
+    def _load_data(self, is_training):
         if not Model.data_loaded:
             with open(self.training_data, "r") as f_in:
                 datas = [[float(x) for x in line.split("\t")] for line in f_in.read().splitlines()]
-            Model.input_dim = len(datas[0]) - 1
-            Model.data_inputs = [data[:-1] for data in datas]
-            Model.data_outputs = [data[-1:] for data in datas]
-            Model.data_train_inputs, Model.data_test_inputs, \
-            Model.data_train_outputs, Model.data_test_outputs = \
-                cross_validation.train_test_split(self.data_inputs, self.data_outputs,
-                                                  test_size=self.test_size, random_state=0)
+            Model.input_dim = len(datas[0])
+            if is_training:
+                Model.input_dim -= 1
+                Model.data_inputs = [data[:-1] for data in datas]
+                Model.data_outputs = [data[-1:] for data in datas]
+                Model.data_train_inputs, Model.data_test_inputs, \
+                Model.data_train_outputs, Model.data_test_outputs = \
+                    cross_validation.train_test_split(self.data_inputs, self.data_outputs,
+                                                      test_size=self.test_size, random_state=0)
+            else:
+                Model.data_inputs = datas
+            Model.data_loaded = True
 
+
+    random.seed(0)
 
     def get_batch_data(self, training_data=True):
         if training_data:
             return zip(*random.sample(zip(Model.data_train_inputs, Model.data_train_outputs), self.batch_size))
         else:
             return zip(*random.sample(zip(Model.data_test_inputs, Model.data_test_outputs), self.batch_size))
+

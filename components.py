@@ -8,6 +8,7 @@ def get_weight_variable(name, shape, initializer=None, regularizer=None):
         else:
             initializer = tf.contrib.layers.xavier_initializer_conv2d()
     variable = tf.get_variable(name, shape, initializer=initializer, regularizer=regularizer)
+    tf.add_to_collection(tf.GraphKeys.WEIGHTS, variable)
     return variable
 
 

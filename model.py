@@ -28,9 +28,7 @@ class Model():
         with tf.variable_scope("main"):
             self.is_training = tf.placeholder(tf.bool, name="is_training")
             self.inputs = tf.placeholder(tf.float32, shape=[self.batch_size, Model.input_dim], name="inputs")
-            input_layer = self.add_layer(self.inputs, Model.input_dim, self.hidden_dim, self.is_training,
-                    self.dropout, self.dropout_rate, self.bn, "input_layer")
-            hidden_layer = self.add_layer(input_layer, self.hidden_dim, self.hidden_dim, self.is_training,
+            hidden_layer = self.add_layer(self.inputs, Model.input_dim, self.hidden_dim, self.is_training,
                     self.dropout, self.dropout_rate, self.bn, "hidden_layer")
             self.outputs_hat = components.linear_layer(hidden_layer, self.hidden_dim,
                     1, True, "output_layer")
@@ -40,9 +38,9 @@ class Model():
             self.loss = tf.identity(self.cost, "loss")
             global_step = tf.Variable(0, name='global_step', trainable=False)
 
-            self.learning_rate = tf.train.exponential_decay(self.lr, global_step, 300, 0.96, staircase=True)
+            self.learning_rate = tf.train.exponential_decay(self.lr, global_step, 2000, 0.2, staircase=True)
             self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
-            self.gvs = self.optimizer.compute_gradients(self.loss + 0.001*regularization_loss)
+            self.gvs = self.optimizer.compute_gradients(self.loss + 0.002*regularization_loss)
 
             # gradient clipping
             gradients = [grad for grad, var in self.gvs]
@@ -51,8 +49,8 @@ class Model():
 
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
-                self.train_op = self.optimizer.apply_gradients(zip(clipped_gradients, params), global_step)
-                # self.train_op = self.optimizer.minimize(self.loss, global_step=global_step)
+                #self.train_op = self.optimizer.apply_gradients(zip(clipped_gradients, params), global_step)
+                 self.train_op = self.optimizer.minimize(self.loss, global_step=global_step)
 
 
     def add_layer(self, inputs, input_dim, output_dim, is_training, dropout=False, dropout_rate=0,
@@ -98,8 +96,8 @@ class Model():
             Model.data_loaded = True
 
 
-    random.seed(0)
 
+    random.seed(0)
     def get_batch_data(self, training_data=True):
         if training_data:
             return zip(*random.sample(zip(Model.data_train_inputs, Model.data_train_outputs), self.batch_size))

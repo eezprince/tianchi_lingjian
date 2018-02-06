@@ -11,7 +11,7 @@ onehot_column_path = r"data/onehot_column.txt"
 normalized_data_path = r"data/normalized_data.txt"
 
 # configure
-training_data = False
+training_data = True
 if not training_data:
     prepared_data_path += "_test"
     normalized_data_path += "_test"
@@ -110,7 +110,7 @@ if training_data:
                             X = [row[column_index] for row in datas]
                             X = [mean if x.lower() == "nan" else float(x) for x in X]
                             corr_dis = abs(np.corrcoef(X, Y)[0,1])
-                            if corr_dis > 0.15:
+                            if corr_dis > 0.1:
                                 f_out.write("{}\t{}".format(np.mean(l), std))
                             else:
                                 empty_count += 1

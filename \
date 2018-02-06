@@ -1,0 +1,8 @@
+max_steps: 100000
+learning_rate: 0.01
+log_dir: /home/tianhz/project/tianchi/data/output
+hidden_dim: 300
+batch_size: 50
+dropout_rate: 0.5
+test_size: 0.1
+training_data: /home/tianhz/project/tianchi/data/normalized_data.txt
